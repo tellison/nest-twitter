@@ -136,7 +136,11 @@ class NestActor(nestToken: String, firebaseURL: String) extends Actor {
               val structId = therm.child("structure_id").getValue.toString
               val thermId = therm.getKey()
               val location = therm.child("name").getValue.toString
-              val targetTemp = therm.child("target_temperature_f").getValue.toString
+              var targetTemp = therm.child("target_temperature_f").getValue.toString
+              val preferScaleC = therm.child("temperature_scale").getValue.toString.equals("C")
+              if (preferScaleC) {
+                targetTemp = therm.child("target_temperature_c").getValue.toString
+              }
               val onlineStatus = therm.child("is_online").getValue.toString
 
               def diffAndSend(stateMap: HashMap[String, HashMap[String, String]],
