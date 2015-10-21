@@ -17,8 +17,8 @@
 package com.nestlabs.twest
 
 import akka.actor.{Props, Actor}
-import com.firebase.client.{DataSnapshot, FirebaseError, ValueEventListener, Firebase}
-import com.firebase.client.Firebase.{CompletionListener, AuthListener}
+import com.firebase.client.{AuthData, DataSnapshot, FirebaseError, ValueEventListener, Firebase}
+import com.firebase.client.Firebase.{CompletionListener, AuthResultHandler}
 import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
 import scala.concurrent.duration._
@@ -45,11 +45,11 @@ class NestActor(nestToken: String, firebaseURL: String) extends Actor {
   val structMap = HashMap[String, String]()
 
   // authenticate with our current credentials
-  fb.auth(nestToken, new AuthListener {
-    def onAuthError(e: FirebaseError) {
+  fb.authWithCustomToken(nestToken, new AuthResultHandler {
+    def onAuthenticationError(e: FirebaseError) {
       println("fb auth error: " + e)
     }
-    def onAuthSuccess(a: AnyRef) {
+    def onAuthenticated(a: AuthData) {
       println("fb auth success: " + a)
       // when we've successfully authed, add a change listener to the whole tree
       fb.addValueEventListener(new ValueEventListener {
@@ -63,9 +63,6 @@ class NestActor(nestToken: String, firebaseURL: String) extends Actor {
           self ! err
         }
       })
-    }
-    def onAuthRevoked(e: FirebaseError) {
-      println("fb auth revoked: " + e)
     }
   })
 
@@ -86,7 +83,7 @@ class NestActor(nestToken: String, firebaseURL: String) extends Actor {
           structures.getChildren.foreach { struct =>
             // update our map of struct ids -> struct names for lookup later
             val structName = struct.child("name").getValue.toString
-            structMap += (struct.getName() -> structName)
+            structMap += (struct.getKey() -> structName)
             // now compare states and send an update if they changed
             val structState = struct.child("away").getValue.toString
             val oldState = structureStates.get(structName).getOrElse("n/a")
@@ -97,14 +94,14 @@ class NestActor(nestToken: String, firebaseURL: String) extends Actor {
           }
         } else {
           // having no structures would be weird, but warn
-          println("no structures? children=" + s.getChildren.map(_.getName).mkString(", "))
+          println("no structures? children=" + s.getChildren.map(_.getKey).mkString(", "))
         }
         // do basically the same thing for CO alarms
         val smokes = s.child("devices").child("smoke_co_alarms")
         if (smokes != null && smokes.getChildren != null) {
           smokes.getChildren.foreach { smoke =>
             val structId = smoke.child("structure_id").getValue.toString
-            val smokeId = smoke.getName()
+            val smokeId = smoke.getKey()
             val location = smoke.child("name").getValue.toString
             val smokeStatus = smoke.child("smoke_alarm_state").getValue.toString
             val coStatus = smoke.child("co_alarm_state").getValue.toString
@@ -137,7 +134,7 @@ class NestActor(nestToken: String, firebaseURL: String) extends Actor {
           if (therms != null && therms.getChildren != null) {
             therms.getChildren.foreach { therm =>
               val structId = therm.child("structure_id").getValue.toString
-              val thermId = therm.getName()
+              val thermId = therm.getKey()
               val location = therm.child("name").getValue.toString
               val targetTemp = therm.child("target_temperature_f").getValue.toString
               val onlineStatus = therm.child("is_online").getValue.toString
